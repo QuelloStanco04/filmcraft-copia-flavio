@@ -22,7 +22,7 @@ use crate::icons::{self, Icon};
 use crate::state::{ThumbnailMode, TimelineView, Tool};
 use crate::theme::Tokens;
 
-use super::timeline_hit::{EdgeKind, Grab, edge_geometry, grab_at, marker_at, marker_range_rect, marker_rect, marker_under_pointer};
+use super::timeline_hit::{EdgeKind, Grab, edge_geometry, grab_at_with_playhead, marker_at, marker_range_rect, marker_rect, marker_under_pointer};
 pub use super::timeline_hit::{Hit, ROLL_PX, hit, selection_trim_kind};
 
 const TOP_H: f32 = 58.0; // timecode + toolbar (left) / ruler (right)
@@ -1742,7 +1742,7 @@ fn snap_to(app: &mut FilmcraftApp, seq: &Sequence, layout: &Layout, t: Tick, exc
 pub fn hit_json(app: &FilmcraftApp, pos: Pos2, mods: egui::Modifiers) -> Value {
     let (Some(layout), Some(seq)) = (app.tl.layout.as_ref(), app.session.active_sequence()) else { return json!({"hit": "none"}) };
     let t = layout.tick_at(pos.x);
-    let grab = grab_at(seq, layout, pos, app.ui.tool, mods, app.session.prefs.trim.selection_tool_roll_ripple);
+    let grab = grab_at_with_playhead(seq, layout, pos, app.ui.tool, mods, app.session.prefs.trim.selection_tool_roll_ripple, app.session.playhead());
     let kind = match grab {
         Grab::Edge { kind, .. } => json!(kind.name()),
         Grab::Volume { .. } => json!("volume"),
@@ -1750,6 +1750,7 @@ pub fn hit_json(app: &FilmcraftApp, pos: Pos2, mods: egui::Modifiers) -> Value {
     };
     match grab.hit() {
         Hit::Ruler => json!({"hit": "ruler", "time": t.0}),
+        Hit::Playhead => json!({"hit": "playhead", "time": t.0}),
         Hit::Clip { track, clip, edge } => {
             json!({"hit": "clip", "track": track.0, "clip": clip.0, "edge": edge.map(|e| format!("{e:?}")), "kind": kind, "time": t.0})
         }
@@ -2134,9 +2135,9 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
         && let Some(p) = ctx.input(|i| i.pointer.press_origin())
     {
         app.tl.cancelled = false;
-        let grab = grab_at(seq, layout, p, tool, mods, roll_ripple);
+        let grab = grab_at_with_playhead(seq, layout, p, tool, mods, roll_ripple, app.session.playhead());
         // the playhead jumps to a press on the ruler at once, not only once the pointer has moved (#1090)
-        if matches!(grab, Grab::Other(Hit::Ruler)) {
+        if matches!(grab, Grab::Other(Hit::Ruler | Hit::Playhead)) {
             scrub_playhead(app, seq, layout, p, mods.shift);
         }
         app.tl.pressed = Some(Pressed { pos: p, tick: layout.tick_at(p.x), grab });
@@ -2187,7 +2188,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
         && let Some(p) = pos
         && area.contains(p)
     {
-        let g = grab_at(seq, layout, p, tool, mods, roll_ripple);
+        let g = grab_at_with_playhead(seq, layout, p, tool, mods, roll_ripple, app.session.playhead());
         let cur = match (tool, g) {
             (_, Grab::Edge { .. }) => CursorIcon::ResizeColumn,
             (Tool::Selection, Grab::Other(Hit::Transition { edge: Some(_), .. })) => CursorIcon::ResizeColumn,
@@ -2198,6 +2199,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
             (Tool::Slip | Tool::Slide, Grab::Other(Hit::Clip { .. })) => CursorIcon::ResizeHorizontal,
             (Tool::Hand, _) => CursorIcon::Grab,
             (Tool::Zoom, _) => CursorIcon::ZoomIn,
+            (_, Grab::Other(Hit::Playhead)) => CursorIcon::ResizeHorizontal,
             _ => CursorIcon::Default,
         };
         ctx.set_cursor_icon(cur);
@@ -2223,7 +2225,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
             // a press and release in the same frame is never stored: it happened where egui says
             None => {
                 let Some(p) = resp.interact_pointer_pos() else { return };
-                Pressed { pos: p, tick: layout.tick_at(p.x), grab: grab_at(seq, layout, p, tool, mods, roll_ripple) }
+                Pressed { pos: p, tick: layout.tick_at(p.x), grab: grab_at_with_playhead(seq, layout, p, tool, mods, roll_ripple, app.session.playhead()) }
             }
         };
         let (p, t) = (pressed.pos, pressed.tick);
@@ -2234,7 +2236,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
             g => g,
         };
         let started = match (tool, grab) {
-            (_, Grab::Other(Hit::Ruler)) => Some(Drag::Scrub { initial: app.session.playhead() }),
+            (_, Grab::Other(Hit::Ruler | Hit::Playhead)) => Some(Drag::Scrub { initial: app.session.playhead() }),
             (Tool::Hand, _) => Some(Drag::Pan { last: p, start_scroll: app.ui.timeline.target_scroll, start_v: app.ui.timeline.v_scroll }),
             (Tool::Zoom, _) => {
                 if resp.clicked() {

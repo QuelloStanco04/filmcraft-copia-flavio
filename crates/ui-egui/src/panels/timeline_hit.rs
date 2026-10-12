@@ -51,6 +51,9 @@ pub(crate) fn edge_geometry(seq: &Sequence, layout: &Layout, track: TrackId, cli
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Hit {
     Ruler,
+    /// The playhead's line below the ruler: a press grabs the playhead instead of the clip it
+    /// is drawn over. Only [`grab_at_with_playhead`] returns it.
+    Playhead,
     Clip {
         track: TrackId,
         clip: ClipId,
@@ -273,6 +276,32 @@ pub fn grab_at(seq: &Sequence, layout: &Layout, pos: Pos2, tool: Tool, mods: Mod
         _ => return Grab::Other(h),
     };
     Grab::Edge { track, clip, edge, kind }
+}
+
+/// How close (px) to the playhead's line a press has to be, below the ruler, to grab it.
+pub const PLAYHEAD_PX: f32 = 4.0;
+
+/// [`grab_at`], except that a press on the playhead's line grabs the playhead wherever it is on
+/// the tracks, so it can be dragged without selecting or moving the clip underneath it, as in
+/// Premiere Pro. A clip edge or a transition end that is also within reach still wins, so a
+/// playhead parked on a cut does not stop that cut from being trimmed (the ruler's playhead head
+/// is always there to grab). The Razor, Hand, Zoom and Pen tools keep their own press: they act at
+/// the pointer, wherever the playhead is.
+pub fn grab_at_with_playhead(seq: &Sequence, layout: &Layout, pos: Pos2, tool: Tool, mods: Modifiers, roll_ripple: bool, playhead: Tick) -> Grab {
+    let g = grab_at(seq, layout, pos, tool, mods, roll_ripple);
+    if on_playhead_line(layout, pos, tool, playhead) && !matches!(g, Grab::Edge { .. } | Grab::Other(Hit::Transition { edge: Some(_), .. })) {
+        return Grab::Other(Hit::Playhead);
+    }
+    g
+}
+
+fn on_playhead_line(layout: &Layout, pos: Pos2, tool: Tool, playhead: Tick) -> bool {
+    if matches!(tool, Tool::Razor | Tool::Hand | Tool::Zoom | Tool::Pen) || !layout.content.contains(pos) || layout.ruler.contains(pos) {
+        return false;
+    }
+    let x = layout.x_of(playhead);
+    // a hostile position or zoom gives NaN or infinity, which never matches
+    x.is_finite() && (pos.x - x).abs() <= PLAYHEAD_PX
 }
 
 /// A roll of the cut at `clip`'s `edge`, or a regular trim when no clip touches that cut on the
@@ -531,6 +560,53 @@ mod tests {
             [EdgeKind::Trim, EdgeKind::Ripple, ROLL_AB, EdgeKind::Stretch, EdgeKind::Remix].map(EdgeKind::name),
             ["trim", "ripple", "roll", "rateStretch", "remix"]
         );
+    }
+
+    fn grab_ph(seq: &Sequence, l: &Layout, tool: Tool, x: f32, playhead_s: f64) -> Grab {
+        grab_at_with_playhead(seq, l, at(x), tool, Modifiers::NONE, false, Tick::from_seconds_f64(playhead_s))
+    }
+
+    #[test]
+    fn the_playhead_line_is_grabbed_over_a_clip() {
+        let (seq, l, tr) = fixture(clips());
+        // the playhead at 2 s is x = 200, in the middle of clip A
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 200.0, 2.0), Grab::Other(Hit::Playhead));
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 203.5, 2.0), Grab::Other(Hit::Playhead));
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 196.5, 2.0), Grab::Other(Hit::Playhead));
+        // just off the line: the clip, as before
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 205.0, 2.0), Grab::Other(Hit::Clip { track: tr, clip: ClipId(1), edge: None }));
+        // an empty track too
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 900.0, 9.0), Grab::Other(Hit::Playhead));
+    }
+
+    #[test]
+    fn a_cut_under_the_playhead_still_trims() {
+        let (seq, l, tr) = fixture(clips());
+        // the playhead parked on the A | B cut at 3 s
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 297.0, 3.0), edge_grab(tr, 1, Edge::Out, EdgeKind::Trim));
+        assert_eq!(grab_ph(&seq, &l, Tool::Selection, 303.0, 3.0), edge_grab(tr, 2, Edge::In, EdgeKind::Trim));
+    }
+
+    #[test]
+    fn tools_that_act_at_the_pointer_ignore_the_playhead_line() {
+        let (seq, l, tr) = fixture(clips());
+        for tool in [Tool::Razor, Tool::Hand, Tool::Zoom, Tool::Pen] {
+            assert_eq!(grab_ph(&seq, &l, tool, 200.0, 2.0), Grab::Other(Hit::Clip { track: tr, clip: ClipId(1), edge: None }), "{tool:?}");
+        }
+    }
+
+    #[test]
+    fn the_ruler_and_hostile_playheads_are_unchanged() {
+        let (seq, l, _) = fixture(clips());
+        let on_ruler = grab_at_with_playhead(&seq, &l, pos2(200.0, 20.0), Tool::Selection, Modifiers::NONE, false, Tick::from_seconds_f64(2.0));
+        assert_eq!(on_ruler, Grab::Other(Hit::Ruler));
+        for ph in [f64::NAN, f64::INFINITY, -1.0e300, 1.0e300] {
+            let g = grab_ph(&seq, &l, Tool::Selection, 200.0, ph);
+            assert_ne!(g, Grab::Other(Hit::Playhead), "playhead {ph}");
+        }
+        // a hostile pointer never panics
+        let g = grab_at_with_playhead(&seq, &l, pos2(f32::NAN, f32::NAN), Tool::Selection, Modifiers::NONE, false, Tick::ZERO);
+        assert_ne!(g, Grab::Other(Hit::Playhead));
     }
 
     #[test]
