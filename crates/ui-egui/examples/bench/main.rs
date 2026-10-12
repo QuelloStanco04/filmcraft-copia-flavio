@@ -109,8 +109,8 @@ fn orchestrate(args: &[String], o: &Opts) {
     let mut results = Vec::new();
     for name in &wanted {
         let tmp = out.join(format!(".section-{name}-{}.json", std::process::id()));
-        let mut cmd = time_wrapper();
-        cmd.arg(&exe).args(["--section", name, "--json"]).arg(&tmp).args(["--repeat", &o.repeat.to_string()]);
+        let mut cmd = section_command(Path::new("/usr/bin/time"), &exe);
+        cmd.args(["--section", name, "--json"]).arg(&tmp).args(["--repeat", &o.repeat.to_string()]);
         if o.quick {
             cmd.arg("--quick");
         }
@@ -147,17 +147,28 @@ fn orchestrate(args: &[String], o: &Opts) {
     println!("wrote {} and {}", jp.display(), mp.display());
 }
 
-fn time_wrapper() -> Command {
-    let time = Path::new("/usr/bin/time");
+/// The command that runs one section of `exe`: under `time` when it exists (peak RSS), otherwise
+/// `exe` itself (no peak RSS). Windows has no `/usr/bin/time`, nor an `env` to stand in for it.
+fn section_command(time: &Path, exe: &Path) -> Command {
     if time.exists() {
         let mut c = Command::new(time);
-        c.arg(if cfg!(target_os = "macos") { "-l" } else { "-v" });
+        c.arg(if cfg!(target_os = "macos") { "-l" } else { "-v" }).arg(exe);
         c
     } else {
-        // No `time`: run the section directly (no peak RSS).
-        let mut c = Command::new("env");
-        c.arg("--");
-        c
+        Command::new(exe)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_time_a_section_runs_the_exe_itself() {
+        let exe = Path::new("bench-exe");
+        let c = section_command(Path::new("no/such/time"), exe);
+        assert_eq!(c.get_program(), exe.as_os_str());
+        assert_eq!(c.get_args().count(), 0);
     }
 }
 
