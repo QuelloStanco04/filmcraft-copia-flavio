@@ -11,6 +11,19 @@ launch `target/release/filmcraft`. The development profile optimizes dependencie
 loops, but still builds the editor at optimization level 1; it is not the release performance
 baseline. Keep the same build profile when comparing code changes.
 
+**Building for the machine you run on.** The code has no hand-written SIMD (no `std::arch`, no
+runtime feature detection), so it relies on the compiler's auto-vectorization, and a default
+release build targets baseline x86-64 (SSE2). A personal build with
+`RUSTFLAGS="-C target-cpu=native" cargo build --release -p filmcraft` lets the compiler use AVX2
+and friends. On Windows, `packaging/windows/compila-per-il-mio-pc.bat` does this. The result only
+runs on that CPU or newer, so it is never a release artifact. Measured on a 2-core Intel Xeon
+@ 2.1 GHz (AVX2 and AVX-512 present), software H.264 decode of a 1080p 25 Mbit/s clip (192
+frames, `h264dec`, best of 3, alternating runs; `x86-64-v3` against the default build): one
+thread 26.4–26.8 fps → 28.6–31.0 fps (about 7–15 % faster), two threads 45.1–46.4 fps →
+46.9–49.6 fps (1–9 %). The spread is large on a shared machine; AMD Zen 1 / Zen+ run 256-bit AVX2
+as two 128-bit halves, so expect a smaller gain there. Not measured on Windows or with hardware
+decoding, which does not use these loops.
+
 Timeline, Effect Controls, Markers, Captions and mixer drawing borrow a sequence from a shared
 immutable project snapshot instead of deep-copying its clips and effects on every redraw. Commands
 can still replace the session's project during the pass; the snapshot stays valid until drawing
