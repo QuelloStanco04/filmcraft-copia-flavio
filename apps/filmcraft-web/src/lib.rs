@@ -184,7 +184,8 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
                 } else if demo {
                     let _ = session.execute("file.openDemoProject", json!({}));
                 }
-                let mut app = FilmcraftApp::new(session);
+                // `?minimal`: the interface for a keyboard and mouse (fewer buttons and panels).
+                let mut app = FilmcraftApp::new(session).with_minimal_ui(query_flag("minimal"));
                 import::install_hooks(&mut app);
                 // Settings ▸ General ▸ Interface Language ▸ System Language (#218): the browser's languages.
                 app.hooks.system_languages =

@@ -271,8 +271,19 @@ pub(crate) const EXPORT_SAVE_DIALOGS: [(&str, &str, &str); 7] = [
     ("file.exportSelectionProject", "FilmCraft Project", "fcproj"),
 ];
 
+/// Track heights a sequence's Timeline starts with in the minimal interface (a sequence that has a
+/// saved view keeps its own).
+const MINIMAL_VIDEO_TRACK_H: f32 = 92.0;
+const MINIMAL_AUDIO_TRACK_H: f32 = 44.0;
+
 pub struct FilmcraftApp {
     pub session: Session,
+    /// Minimal interface for a keyboard-and-mouse setup (`?minimal` on the web): hides the Tools
+    /// panel, the Discord button and the transport buttons that have shortcuts. Off by default.
+    pub minimal_ui: bool,
+    /// The workspace whose History / Essential Graphics / Text tabs the minimal interface has
+    /// already closed (empty until the first frame).
+    minimal_tabs_workspace: String,
     pub ui: UiState,
     pub tokens: Tokens,
     pub frames: Arc<FrameServer>,
@@ -533,6 +544,8 @@ impl FilmcraftApp {
         let language = i18n::Language::parse(&session.prefs.general.interface_language).unwrap_or_default();
         Self {
             session,
+            minimal_ui: false,
+            minimal_tabs_workspace: String::new(),
             ui: UiState { language, ..UiState::default() },
             tokens: Tokens::for_kind(ThemeKind::Dark),
             frames,
@@ -597,6 +610,45 @@ impl FilmcraftApp {
             workspace_restored: false,
             workspaces,
             menu_workspaces: Default::default(),
+        }
+    }
+
+    /// Turns the minimal interface on or off (see [`FilmcraftApp::minimal_ui`]).
+    pub fn with_minimal_ui(mut self, on: bool) -> Self {
+        self.minimal_ui = on;
+        if on {
+            // A timeline in the CapCut spirit: tall clips with big thumbnails, slim audio lanes and
+            // a narrow track-header column.
+            let tl = &mut self.ui.timeline;
+            tl.video_track_h = MINIMAL_VIDEO_TRACK_H;
+            tl.audio_track_h = MINIMAL_AUDIO_TRACK_H;
+            tl.header_w = 132.0;
+        }
+        self
+    }
+
+    /// In the minimal interface the Tools panel stays closed, whichever workspace is loaded. The
+    /// tools keep their shortcuts (V, B, C, Y, …), which do not depend on the panel being shown.
+    /// History, Essential Graphics and Text are closed once per workspace load, so Window ▸ can
+    /// still bring them back until the workspace changes.
+    fn enforce_minimal_ui(&mut self) {
+        if !self.minimal_ui {
+            return;
+        }
+        if self.ui.dock.contains(PanelKind::Tools) {
+            self.ui.dock.close(PanelKind::Tools);
+        }
+        if self.minimal_tabs_workspace != self.ui.workspace {
+            for panel in [PanelKind::History, PanelKind::EssentialGraphics, PanelKind::Text] {
+                if self.ui.dock.contains(panel) {
+                    self.ui.dock.close(panel);
+                }
+            }
+            // Give the timeline the room: the panels above shrink to 40% of the height.
+            if let dock::DockNode::Split { vertical: true, size: size @ dock::SplitSize::Ratio(_), .. } = &mut self.ui.dock {
+                *size = dock::SplitSize::Ratio(0.40);
+            }
+            self.minimal_tabs_workspace = self.ui.workspace.clone();
         }
     }
 
@@ -789,7 +841,8 @@ impl FilmcraftApp {
                 }
                 None => {
                     let d = state::TimelineView::default();
-                    (v.v_scroll, v.a_scroll, v.video_track_h, v.audio_track_h) = (0.0, 0.0, d.video_track_h, d.audio_track_h);
+                    let (video_h, audio_h) = if self.minimal_ui { (MINIMAL_VIDEO_TRACK_H, MINIMAL_AUDIO_TRACK_H) } else { (d.video_track_h, d.audio_track_h) };
+                    (v.v_scroll, v.a_scroll, v.video_track_h, v.audio_track_h) = (0.0, 0.0, video_h, audio_h);
                     (v.fit_pending, v.fit_empty) = (true, None);
                     self.timeline_view_last = None;
                 }
@@ -1702,6 +1755,7 @@ impl FilmcraftApp {
         }
         self.sync_pool();
         self.apply_prefs(&ctx);
+        self.enforce_minimal_ui();
         #[cfg(not(target_arch = "wasm32"))]
         self.tick_media_refresh(&ctx);
         for ev in self.session.drain_events() {

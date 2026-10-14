@@ -1213,15 +1213,20 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
         let btn_rect = |x0: f32| Rect::from_min_max(pos2(hrect.min.x + x0, hrect.min.y + 1.0), pos2(hrect.min.x + x0 + 24.0, hrect.max.y - 2.0));
         // 1. source patch (absent when unpatched)
         let patched = if r.kind == TrackKind::Video { tg.video_dest == Some(r.track) } else { tg.audio_dest == Some(r.track) };
+        // (the minimal interface drops the patch, target and sync-lock buttons and packs the rest
+        // into a narrower column)
+        let minimal = app.minimal_ui;
         let pr = btn_rect(13.0);
-        app.auto.add(&format!("timeline.track.{label}.sourcePatch"), pr, "Source patch");
-        if patch_button(ui, pr, visible, &label, patched, false, egui::Id::new(("patch", r.track.0)), t).clicked() {
-            actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "sourcePatch": !patched})));
+        if !minimal {
+            app.auto.add(&format!("timeline.track.{label}.sourcePatch"), pr, "Source patch");
+            if patch_button(ui, pr, visible, &label, patched, false, egui::Id::new(("patch", r.track.0)), t).clicked() {
+                actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "sourcePatch": !patched})));
+            }
         }
         // 2. track lock
         let small = |x: f32, y: f32| Rect::from_center_size(pos2(hrect.min.x + x, y), vec2(18.0, 18.0));
         let upper_y = hrect.min.y + (16.0f32).min(hrect.height() / 2.0);
-        let lock_r = small(49.0, hrect.center().y);
+        let lock_r = small(if minimal { 16.0 } else { 49.0 }, hrect.center().y);
         let lresp = crate::widgets::icon_toggle(
             ui,
             lock_r.intersect(visible),
@@ -1242,20 +1247,31 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
         // 3. target
         let targeted = tg.targeted.contains(&r.track);
         let trr = btn_rect(61.0);
-        app.auto.add(&format!("timeline.track.{label}.target"), trr, "Toggle track targeting");
-        if patch_button(ui, trr, visible, &label, targeted, true, egui::Id::new(("target", r.track.0)), t).clicked() {
-            actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "targeted": !targeted})));
+        if !minimal {
+            app.auto.add(&format!("timeline.track.{label}.target"), trr, "Toggle track targeting");
+            if patch_button(ui, trr, visible, &label, targeted, true, egui::Id::new(("target", r.track.0)), t).clicked() {
+                actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "targeted": !targeted})));
+            }
         }
         // 4. upper line icons
-        let mut x = 102.0;
-        let sr = small(x, upper_y);
-        let sresp =
-            crate::widgets::icon_toggle(ui, sr.intersect(visible), Icon::SyncLock, tr.sync_lock, t, egui::Id::new(("syncLock", r.track.0)), Some(t.text_dim));
-        app.auto.add(&format!("timeline.track.{label}.syncLock"), sr, "Toggle Sync Lock");
-        if sresp.clicked() {
-            actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "syncLock": !tr.sync_lock})));
+        let mut x = if minimal { 46.0 } else { 102.0 };
+        if !minimal {
+            let sr = small(x, upper_y);
+            let sresp = crate::widgets::icon_toggle(
+                ui,
+                sr.intersect(visible),
+                Icon::SyncLock,
+                tr.sync_lock,
+                t,
+                egui::Id::new(("syncLock", r.track.0)),
+                Some(t.text_dim),
+            );
+            app.auto.add(&format!("timeline.track.{label}.syncLock"), sr, "Toggle Sync Lock");
+            if sresp.clicked() {
+                actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "syncLock": !tr.sync_lock})));
+            }
+            x += 24.0;
         }
-        x += 24.0;
         if r.kind == TrackKind::Video {
             let er = small(x, upper_y);
             let eresp = crate::widgets::icon_toggle(
@@ -1309,7 +1325,7 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
         }
         // 5. name on the lower line (or inline when short)
         if hrect.height() >= 40.0 {
-            p.text(pos2(hrect.min.x + 94.0, hrect.min.y + 34.0), Align2::LEFT_CENTER, &tr.name, Tokens::ui(11.0), t.text_dim);
+            p.text(pos2(hrect.min.x + if minimal { 36.0 } else { 94.0 }, hrect.min.y + 34.0), Align2::LEFT_CENTER, &tr.name, Tokens::ui(11.0), t.text_dim);
         }
         // resize track height by dragging the header's bottom edge, or the outer edge of the top video
         // track or the last audio track, which also reaches into the empty space past it

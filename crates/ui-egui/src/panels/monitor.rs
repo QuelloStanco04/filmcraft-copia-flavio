@@ -893,6 +893,20 @@ fn set_transport_visible(hidden: &mut Vec<String>, command: &str, visible: bool)
 /// Width and height of a transport button.
 const TRANSPORT_BUTTON: f32 = 28.0;
 
+/// The transport buttons the minimal interface keeps (play, step, go to In/Out, for both monitors).
+const MINIMAL_TRANSPORT: [&str; 10] = [
+    "src.goIn",
+    "src.stepBack",
+    "source.playback.toggle",
+    "src.stepFwd",
+    "src.goOut",
+    "markers.goToIn",
+    "playhead.stepBack",
+    "playback.toggle",
+    "playhead.stepForward",
+    "markers.goToOut",
+];
+
 fn transport(app: &mut FilmcraftApp, ui: &mut egui::Ui, row: Rect, which: Which) {
     let t = app.tokens;
     let src = which == Which::Source;
@@ -934,8 +948,13 @@ fn transport(app: &mut FilmcraftApp, ui: &mut egui::Ui, row: Rect, which: Which)
     let hidden = monitor_view::view(app, which).transport_hidden.clone();
     let all_buttons = buttons.clone();
     buttons.retain(|(_, command, _)| transport_visible(&hidden, command));
+    if app.minimal_ui {
+        // Minimal interface: playback and navigation stay; marks, lift/extract, insert/overwrite,
+        // frame export and proxies are left to their shortcuts and menus.
+        buttons.retain(|(_, command, _)| MINIMAL_TRANSPORT.contains(command));
+    }
     let prefix = if src { "source" } else { "program" };
-    if row.width() >= 30.0 {
+    if row.width() >= 30.0 && !app.minimal_ui {
         // Keep the existing button-editor affordance only when it has its own space.
         // Customize this monitor's transport separately from the other monitor.
         let r = Rect::from_min_size(pos2(row.max.x - 30.0, row.min.y + 5.0), vec2(22.0, 22.0));
