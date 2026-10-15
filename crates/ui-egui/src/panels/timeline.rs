@@ -27,6 +27,7 @@ pub use super::timeline_hit::{Hit, ROLL_PX, hit, selection_trim_kind};
 
 const TOP_H: f32 = 58.0; // timecode + toolbar (left) / ruler (right)
 const RULER_H: f32 = 44.0;
+const MINIMAL_TOP_H: f32 = 26.0 + RULER_H; // minimal interface: timecode + toolbar in a strip above the ruler
 const SCROLLBAR_H: f32 = 17.0;
 const DIVIDER_H: f32 = 5.0;
 const MASTER_H: f32 = 34.0;
@@ -302,8 +303,9 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     let rate = seq.settings.frame_rate;
     let dt = ctx.input(|i| i.stable_dt).min(0.05) as f64;
     let header_w = app.ui.timeline.header_w;
-    let content = Rect::from_min_max(pos2(rect.min.x + header_w, rect.min.y + TOP_H), pos2(rect.max.x - SCROLLBAR_H, rect.max.y - SCROLLBAR_H));
-    let ruler = Rect::from_min_max(pos2(content.min.x, rect.min.y + TOP_H - RULER_H), pos2(content.max.x, rect.min.y + TOP_H));
+    let top_h = if app.minimal_ui { MINIMAL_TOP_H } else { TOP_H };
+    let content = Rect::from_min_max(pos2(rect.min.x + header_w, rect.min.y + top_h), pos2(rect.max.x - SCROLLBAR_H, rect.max.y - SCROLLBAR_H));
+    let ruler = Rect::from_min_max(pos2(content.min.x, rect.min.y + top_h - RULER_H), pos2(content.max.x, rect.min.y + top_h));
     app.last_timeline_width = content.width();
     let painter = ui.painter().clone();
     painter.rect_filled(rect, 0.0, t.panel_bg);
@@ -931,7 +933,11 @@ fn draw_waveform(app: &mut FilmcraftApp, p: &egui::Painter, body: Rect, it: &Tra
     let pkey = (it.item, it.audio_stream);
     let spp = 256.0;
     let sr = 48_000.0;
-    let zone_h = (body.height() * 0.42).max(8.0);
+    // The minimal interface draws the waveform symmetric, over the full clip height under the
+    // name band, in a lighter colour than the clip.
+    let minimal = app.minimal_ui;
+    let col = if minimal { col.lerp_to_gamma(Color32::WHITE, 0.7) } else { col };
+    let zone_h = if minimal { (body.height() - 15.0).max(8.0) } else { (body.height() * 0.42).max(8.0) };
     let area = Rect::from_min_max(pos2(body.min.x + 1.0, body.max.y - zone_h - 1.0), pos2(body.max.x - 1.0, body.max.y - 1.0));
     let clip = p.clip_rect().intersect(area);
     if clip.width() <= 0.0 {
@@ -972,13 +978,19 @@ fn draw_waveform(app: &mut FilmcraftApp, p: &egui::Painter, body: Rect, it: &Tra
             (m * gain).clamp(0.0, 1.0) * area.height()
         };
         if h > 0.3 {
-            mesh.add_colored_rect(Rect::from_min_max(pos2(x as f32, area.max.y - h), pos2(x as f32 + 1.0, area.max.y)), col);
+            let bar = if minimal {
+                let c = area.center().y;
+                Rect::from_min_max(pos2(x as f32, c - h / 2.0), pos2(x as f32 + 1.0, c + h / 2.0))
+            } else {
+                Rect::from_min_max(pos2(x as f32, area.max.y - h), pos2(x as f32 + 1.0, area.max.y))
+            };
+            mesh.add_colored_rect(bar, col);
         }
     }
     p.add(mesh);
     // channel label box
     let cb = Rect::from_min_size(pos2(body.min.x + 3.0, body.max.y - 11.0), vec2(8.0, 9.0));
-    if body.width() > 30.0 {
+    if body.width() > 30.0 && !minimal {
         p.rect_filled(cb, 1.0, Color32::from_black_alpha(160));
         p.text(cb.center(), Align2::CENTER_CENTER, "1", Tokens::ui(7.5), Color32::from_rgb(0xd9, 0xd9, 0xd9));
     }
@@ -1211,22 +1223,52 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
         }
         let label = format!("{}{}", if r.kind == TrackKind::Video { "V" } else { "A" }, r.index + 1);
         let btn_rect = |x0: f32| Rect::from_min_max(pos2(hrect.min.x + x0, hrect.min.y + 1.0), pos2(hrect.min.x + x0 + 24.0, hrect.max.y - 2.0));
+        let minimal = app.minimal_ui;
+        if minimal {
+            // One chip per track: lit = the track is active. Click toggles the output (video) or the
+            // mute (audio); right-click opens lock (and solo for audio).
+            let on = if r.kind == TrackKind::Video { tr.enabled } else { !tr.muted };
+            let chip_h = (hrect.height() - 6.0).clamp(14.0, 22.0);
+            let chip_y = if hrect.height() < 40.0 { hrect.center().y } else { hrect.min.y + 6.0 + chip_h / 2.0 };
+            let chip = Rect::from_center_size(pos2(hrect.center().x, chip_y), vec2((hw - 10.0).max(20.0), chip_h));
+            let cresp = ui.interact(chip.intersect(visible), egui::Id::new(("chip", r.track.0)), Sense::click());
+            let lit = if r.kind == TrackKind::Video { t.accent } else { Color32::from_rgb(0x2d, 0x9d, 0x78) };
+            let fill = if !on { t.hover } else { lit };
+            let fill = if cresp.hovered() && !on { t.pressed } else { fill };
+            p.rect_filled(chip, 3.0, fill);
+            p.text(chip.center(), Align2::CENTER_CENTER, &label, Tokens::ui(11.0), if on { Color32::WHITE } else { t.text_dim });
+            let (key, tip) = if r.kind == TrackKind::Video { ("enabled", "Toggle Track Output") } else { ("muted", "Mute Track") };
+            app.auto.add(&format!("timeline.track.{label}.{key}"), chip, tip);
+            let cresp = cresp.on_hover_text(if r.kind == TrackKind::Video { tl!("Click: show or hide this track") } else { tl!("Click: mute or unmute this track") });
+            if cresp.clicked() {
+                let params = if r.kind == TrackKind::Video { json!({"track": r.track.0, "enabled": !tr.enabled}) } else { json!({"track": r.track.0, "muted": !tr.muted}) };
+                actions.push(("timeline.setTrack".into(), params));
+            }
+            cresp.context_menu(|ui| {
+                if ui.button(if tr.locked { tl!("Unlock track") } else { tl!("Lock track") }).clicked() {
+                    actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "locked": !tr.locked})));
+                    ui.close_menu();
+                }
+                if r.kind == TrackKind::Audio && ui.button(if tr.solo { tl!("Unsolo track") } else { tl!("Solo track") }).clicked() {
+                    actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "solo": !tr.solo})));
+                    ui.close_menu();
+                }
+            });
+            if tr.locked {
+                p.rect_filled(Rect::from_min_max(pos2(hrect.max.x - 4.0, hrect.min.y), hrect.max), 0.0, t.pressed);
+            }
+        } else {
         // 1. source patch (absent when unpatched)
         let patched = if r.kind == TrackKind::Video { tg.video_dest == Some(r.track) } else { tg.audio_dest == Some(r.track) };
-        // (the minimal interface drops the patch, target and sync-lock buttons and packs the rest
-        // into a narrower column)
-        let minimal = app.minimal_ui;
         let pr = btn_rect(13.0);
-        if !minimal {
-            app.auto.add(&format!("timeline.track.{label}.sourcePatch"), pr, "Source patch");
-            if patch_button(ui, pr, visible, &label, patched, false, egui::Id::new(("patch", r.track.0)), t).clicked() {
-                actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "sourcePatch": !patched})));
-            }
+        app.auto.add(&format!("timeline.track.{label}.sourcePatch"), pr, "Source patch");
+        if patch_button(ui, pr, visible, &label, patched, false, egui::Id::new(("patch", r.track.0)), t).clicked() {
+            actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "sourcePatch": !patched})));
         }
         // 2. track lock
         let small = |x: f32, y: f32| Rect::from_center_size(pos2(hrect.min.x + x, y), vec2(18.0, 18.0));
         let upper_y = hrect.min.y + (16.0f32).min(hrect.height() / 2.0);
-        let lock_r = small(if minimal { 16.0 } else { 49.0 }, hrect.center().y);
+        let lock_r = small(49.0, hrect.center().y);
         let lresp = crate::widgets::icon_toggle(
             ui,
             lock_r.intersect(visible),
@@ -1247,31 +1289,20 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
         // 3. target
         let targeted = tg.targeted.contains(&r.track);
         let trr = btn_rect(61.0);
-        if !minimal {
-            app.auto.add(&format!("timeline.track.{label}.target"), trr, "Toggle track targeting");
-            if patch_button(ui, trr, visible, &label, targeted, true, egui::Id::new(("target", r.track.0)), t).clicked() {
-                actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "targeted": !targeted})));
-            }
+        app.auto.add(&format!("timeline.track.{label}.target"), trr, "Toggle track targeting");
+        if patch_button(ui, trr, visible, &label, targeted, true, egui::Id::new(("target", r.track.0)), t).clicked() {
+            actions.push(("timeline.setTargeting".into(), json!({"track": r.track.0, "targeted": !targeted})));
         }
         // 4. upper line icons
-        let mut x = if minimal { 46.0 } else { 102.0 };
-        if !minimal {
-            let sr = small(x, upper_y);
-            let sresp = crate::widgets::icon_toggle(
-                ui,
-                sr.intersect(visible),
-                Icon::SyncLock,
-                tr.sync_lock,
-                t,
-                egui::Id::new(("syncLock", r.track.0)),
-                Some(t.text_dim),
-            );
-            app.auto.add(&format!("timeline.track.{label}.syncLock"), sr, "Toggle Sync Lock");
-            if sresp.clicked() {
-                actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "syncLock": !tr.sync_lock})));
-            }
-            x += 24.0;
+        let mut x = 102.0;
+        let sr = small(x, upper_y);
+        let sresp =
+            crate::widgets::icon_toggle(ui, sr.intersect(visible), Icon::SyncLock, tr.sync_lock, t, egui::Id::new(("syncLock", r.track.0)), Some(t.text_dim));
+        app.auto.add(&format!("timeline.track.{label}.syncLock"), sr, "Toggle Sync Lock");
+        if sresp.clicked() {
+            actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "syncLock": !tr.sync_lock})));
         }
+        x += 24.0;
         if r.kind == TrackKind::Video {
             let er = small(x, upper_y);
             let eresp = crate::widgets::icon_toggle(
@@ -1325,7 +1356,8 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
         }
         // 5. name on the lower line (or inline when short)
         if hrect.height() >= 40.0 {
-            p.text(pos2(hrect.min.x + if minimal { 36.0 } else { 94.0 }, hrect.min.y + 34.0), Align2::LEFT_CENTER, &tr.name, Tokens::ui(11.0), t.text_dim);
+            p.text(pos2(hrect.min.x + 94.0, hrect.min.y + 34.0), Align2::LEFT_CENTER, &tr.name, Tokens::ui(11.0), t.text_dim);
+        }
         }
         // resize track height by dragging the header's bottom edge, or the outer edge of the top video
         // track or the last audio track, which also reaches into the empty space past it
@@ -1350,7 +1382,7 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
             }
         }
         let resp = ui.interact(
-            Rect::from_min_max(pos2(hrect.min.x + 90.0, hrect.min.y + 26.0), hrect.max).intersect(visible),
+            if minimal { Rect::from_min_max(pos2(hrect.min.x, hrect.min.y + 30.0), hrect.max) } else { Rect::from_min_max(pos2(hrect.min.x + 90.0, hrect.min.y + 26.0), hrect.max) }.intersect(visible),
             egui::Id::new(("hdr", r.track.0)),
             Sense::click(),
         );
@@ -1380,7 +1412,13 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
     p.rect_filled(Rect::from_min_max(rect.min, pos2(rect.max.x, ruler.max.y)), 0.0, t.panel_bg);
     // current timecode: Premiere's big blue timecode
     let tc = format_time(app.session.playhead(), rate, seq.settings.drop_frame, TimeDisplay::Timecode, seq.settings.sample_rate as i64);
-    let tc_rect = Rect::from_min_size(pos2(rect.min.x + 14.0, rect.min.y + 4.0), vec2(hw - 20.0, 20.0));
+    // (the minimal interface has a narrow header column, so the timecode and the toolbar share the strip above the ruler)
+    let minimal = app.minimal_ui;
+    let tc_rect = if minimal {
+        Rect::from_min_size(pos2(rect.min.x + 8.0, rect.min.y + 3.0), vec2(100.0, 20.0))
+    } else {
+        Rect::from_min_size(pos2(rect.min.x + 14.0, rect.min.y + 4.0), vec2(hw - 20.0, 20.0))
+    };
     let tc_id = egui::Id::new(("timeline-tc", seq_id));
     match crate::widgets::timecode_field(ui, tc_id, tc_rect, &tc, app.session.playhead(), Tick::ZERO, rate, seq.settings.drop_frame, t.timecode) {
         Some(Ok(time)) => {
@@ -1393,9 +1431,8 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
     }
     app.auto.add("timeline.timecode", tc_rect, &tc);
     // toolbar: 30 × 30 buttons, "on" = #4b4b4b fill
-    let mut x = rect.min.x + 12.0;
-    let y = rect.min.y + 26.0;
-    let toggles: [(Icon, &str, bool, bool, &str); 6] = [
+    let (mut x, y, btn, pitch) = if minimal { (rect.min.x + 116.0, rect.min.y + 1.0, 24.0, 26.0) } else { (rect.min.x + 12.0, rect.min.y + 26.0, 28.0, 30.0) };
+    let toggles: Vec<(Icon, &str, bool, bool, &str)> = vec![
         (Icon::Nest, "nest", !app.session.state.sequences_as_clips, true, tl!("Insert and overwrite sequences as nests or individual clips")),
         (Icon::Magnet, "snap", app.session.state.snapping, true, tl!("Snap in Timeline (S)")),
         (Icon::Link, "linked", app.session.state.linked_selection, true, tl!("Linked Selection")),
@@ -1403,8 +1440,8 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
         (Icon::Marker, "marker", false, false, tl!("Add Marker (M)")),
         (Icon::Wrench, "settings", false, false, tl!("Timeline Display Settings")),
     ];
-    for (icon, key, on, toggle, tip) in toggles {
-        let r = Rect::from_min_size(pos2(x, y), vec2(28.0, 28.0));
+    for (icon, key, on, toggle, tip) in toggles.into_iter().filter(|(_, key, ..)| !(minimal && *key == "marker")) {
+        let r = Rect::from_min_size(pos2(x, y), vec2(btn, btn));
         let resp = ui.interact(r, egui::Id::new(("tl-toggle", key)), Sense::click()).on_hover_text(tip);
         app.auto.add(&format!("timeline.toggle.{key}"), r, tip);
         if toggle && on {
@@ -1412,7 +1449,7 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
         } else if resp.hovered() {
             p.rect_filled(r, 4.0, t.hover);
         }
-        icons::paint(&p, r.shrink(7.0), icon, if toggle && on { t.text } else { t.text_dim });
+        icons::paint(&p, r.shrink(if minimal { 6.0 } else { 7.0 }), icon, if toggle && on { t.text } else { t.text_dim });
         if resp.clicked() {
             let _ = match key {
                 "nest" => app.session.execute("sequence.nestSequences", json!({})),
@@ -1457,7 +1494,7 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
                 }
             });
         }
-        x += 30.0;
+        x += pitch;
     }
     // ----- ruler: markers row · labels · ticks · 2 pt render bar
     let clip = p.with_clip_rect(ruler);

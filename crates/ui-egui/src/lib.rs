@@ -623,7 +623,7 @@ impl FilmcraftApp {
             let tl = &mut self.ui.timeline;
             tl.video_track_h = MINIMAL_VIDEO_TRACK_H;
             tl.audio_track_h = MINIMAL_AUDIO_TRACK_H;
-            tl.header_w = 132.0;
+            tl.header_w = 48.0;
         }
         self
     }
