@@ -624,6 +624,8 @@ impl FilmcraftApp {
             tl.video_track_h = MINIMAL_VIDEO_TRACK_H;
             tl.audio_track_h = MINIMAL_AUDIO_TRACK_H;
             tl.header_w = 48.0;
+            // thin video lanes need little room: most of the height goes to the audio lanes
+            tl.split = 0.3;
         }
         self
     }

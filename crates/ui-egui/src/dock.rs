@@ -281,7 +281,7 @@ pub fn minimal_workspace() -> DockNode {
     use PanelKind::*;
     use SplitSize::*;
     vsplit(
-        Ratio(0.42),
+        Ratio(0.46),
         hsplit(FixedB(130.0), tabs(&[Program], 0), tabs(&[AudioMeters], 0)),
         hsplit(FixedB(250.0), tabs(&[Timeline], 0), tabs(&[Properties, EffectControls, Source, Text], 0)),
     )

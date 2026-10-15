@@ -31,7 +31,11 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     let stacked_controls = rect.width() < 540.0;
     let separate_source_drag = which == Which::Source && stacked_controls && rect.width() < 310.0;
     let source_drag_h = if separate_source_drag { 26.0 } else { 0.0 };
-    let controls_h = 28.0 + 24.0 + 15.0 + 36.0 + if stacked_controls { 26.0 } else { 0.0 } + source_drag_h;
+    // The minimal interface drops the Program monitor's mini timeline and zoom bar (the Timeline's
+    // ruler does the same job) so the picture gets the height; the zoom and quality menus stay.
+    let compact = app.minimal_ui && which == Which::Program;
+    let bars_h = if compact { 0.0 } else { 24.0 + 15.0 };
+    let controls_h = 28.0 + bars_h + 36.0 + if stacked_controls { 26.0 } else { 0.0 } + source_drag_h;
     let video_area = Rect::from_min_max(rect.min + vec2(4.0, 4.0), pos2(rect.max.x - 4.0, rect.max.y - controls_h));
     // the Source monitor's time ruler starts at `origin` (a subclip restricted to its range)
     let mut origin = Tick::ZERO;
@@ -432,12 +436,15 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     // ---- mini timeline / scrub bar
     let bar = Rect::from_min_size(pos2(rect.min.x + 14.0, settings_y + 28.0 + source_drag_h), vec2(rect.width() - 28.0, 22.0));
     let zoom_bar = Rect::from_min_size(pos2(bar.min.x, bar.max.y + 2.0), vec2(bar.width(), 13.0));
-    follow_playhead(app, which, origin, duration, time);
-    time_zoom_bar(app, ui, zoom_bar, which, origin, duration, rate);
-    mini_timeline(app, ui, bar, which, origin, time, duration, rate, mark_in, mark_out);
+    if !compact {
+        follow_playhead(app, which, origin, duration, time);
+        time_zoom_bar(app, ui, zoom_bar, which, origin, duration, rate);
+        mini_timeline(app, ui, bar, which, origin, time, duration, rate, mark_in, mark_out);
+    }
 
     // ---- transport buttons
-    let row3 = Rect::from_min_size(pos2(rect.min.x, zoom_bar.max.y + 4.0), vec2(rect.width(), 32.0));
+    let row3_y = if compact { bar.min.y + 4.0 } else { zoom_bar.max.y + 4.0 };
+    let row3 = Rect::from_min_size(pos2(rect.min.x, row3_y), vec2(rect.width(), 32.0));
     transport(app, ui, row3, which);
 }
 

@@ -27,7 +27,7 @@ pub use super::timeline_hit::{Hit, ROLL_PX, hit, selection_trim_kind};
 
 const TOP_H: f32 = 58.0; // timecode + toolbar (left) / ruler (right)
 const RULER_H: f32 = 44.0;
-const MINIMAL_TOP_H: f32 = 26.0 + RULER_H; // minimal interface: timecode + toolbar in a strip above the ruler
+const MINIMAL_TOP_H: f32 = RULER_H; // minimal interface: just the ruler; the toolbar sits in its corner
 const SCROLLBAR_H: f32 = 17.0;
 const DIVIDER_H: f32 = 5.0;
 const MASTER_H: f32 = 34.0;
@@ -1428,26 +1428,25 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
     p.rect_filled(Rect::from_min_max(rect.min, pos2(rect.max.x, ruler.max.y)), 0.0, t.panel_bg);
     // current timecode: Premiere's big blue timecode
     let tc = format_time(app.session.playhead(), rate, seq.settings.drop_frame, TimeDisplay::Timecode, seq.settings.sample_rate as i64);
-    // (the minimal interface has a narrow header column, so the timecode and the toolbar share the strip above the ruler)
+    // (the minimal interface has no timecode here, the Program monitor shows it, and packs its
+    // four toolbar buttons 2 × 2 into the corner above the track headers)
     let minimal = app.minimal_ui;
-    let tc_rect = if minimal {
-        Rect::from_min_size(pos2(rect.min.x + 8.0, rect.min.y + 3.0), vec2(100.0, 20.0))
-    } else {
-        Rect::from_min_size(pos2(rect.min.x + 14.0, rect.min.y + 4.0), vec2(hw - 20.0, 20.0))
-    };
-    let tc_id = egui::Id::new(("timeline-tc", seq_id));
-    match crate::widgets::timecode_field(ui, tc_id, tc_rect, &tc, app.session.playhead(), Tick::ZERO, rate, seq.settings.drop_frame, t.timecode) {
-        Some(Ok(time)) => {
-            if let Err(e) = app.session.execute("playhead.set", json!({"time": time.0})) {
-                app.ui.status = e.to_string();
+    if !minimal {
+        let tc_rect = Rect::from_min_size(pos2(rect.min.x + 14.0, rect.min.y + 4.0), vec2(hw - 20.0, 20.0));
+        let tc_id = egui::Id::new(("timeline-tc", seq_id));
+        match crate::widgets::timecode_field(ui, tc_id, tc_rect, &tc, app.session.playhead(), Tick::ZERO, rate, seq.settings.drop_frame, t.timecode) {
+            Some(Ok(time)) => {
+                if let Err(e) = app.session.execute("playhead.set", json!({"time": time.0})) {
+                    app.ui.status = e.to_string();
+                }
             }
+            Some(Err(e)) => app.ui.status = e,
+            None => {}
         }
-        Some(Err(e)) => app.ui.status = e,
-        None => {}
+        app.auto.add("timeline.timecode", tc_rect, &tc);
     }
-    app.auto.add("timeline.timecode", tc_rect, &tc);
     // toolbar: 30 × 30 buttons, "on" = #4b4b4b fill
-    let (mut x, y, btn, pitch) = if minimal { (rect.min.x + 116.0, rect.min.y + 1.0, 24.0, 26.0) } else { (rect.min.x + 12.0, rect.min.y + 26.0, 28.0, 30.0) };
+    let (mut x, y, btn, pitch) = if minimal { (rect.min.x + 3.0, ruler.min.y + 1.0, 21.0, 22.0) } else { (rect.min.x + 12.0, rect.min.y + 26.0, 28.0, 30.0) };
     let toggles: Vec<(Icon, &str, bool, bool, &str)> = vec![
         (Icon::Nest, "nest", !app.session.state.sequences_as_clips, true, tl!("Insert and overwrite sequences as nests or individual clips")),
         (Icon::Magnet, "snap", app.session.state.snapping, true, tl!("Snap in Timeline (S)")),
@@ -1456,8 +1455,13 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
         (Icon::Marker, "marker", false, false, tl!("Add Marker (M)")),
         (Icon::Wrench, "settings", false, false, tl!("Timeline Display Settings")),
     ];
-    for (icon, key, on, toggle, tip) in toggles.into_iter().filter(|(_, key, ..)| !(minimal && *key == "marker")) {
-        let r = Rect::from_min_size(pos2(x, y), vec2(btn, btn));
+    for (slot, (icon, key, on, toggle, tip)) in toggles.into_iter().filter(|(_, key, ..)| !(minimal && matches!(*key, "marker" | "captions"))).enumerate() {
+        if minimal {
+            // 2 × 2 grid
+            x = rect.min.x + 3.0 + (slot % 2) as f32 * pitch + if slot % 2 == 1 { 1.0 } else { 0.0 };
+        }
+        let r =
+            if minimal { Rect::from_min_size(pos2(x, y + (slot / 2) as f32 * pitch), vec2(btn, btn)) } else { Rect::from_min_size(pos2(x, y), vec2(btn, btn)) };
         let resp = ui.interact(r, egui::Id::new(("tl-toggle", key)), Sense::click()).on_hover_text(tip);
         app.auto.add(&format!("timeline.toggle.{key}"), r, tip);
         if toggle && on {
@@ -1465,7 +1469,7 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
         } else if resp.hovered() {
             p.rect_filled(r, 4.0, t.hover);
         }
-        icons::paint(&p, r.shrink(if minimal { 6.0 } else { 7.0 }), icon, if toggle && on { t.text } else { t.text_dim });
+        icons::paint(&p, r.shrink(if minimal { 5.0 } else { 7.0 }), icon, if toggle && on { t.text } else { t.text_dim });
         if resp.clicked() {
             let _ = match key {
                 "nest" => app.session.execute("sequence.nestSequences", json!({})),
@@ -1510,7 +1514,9 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
                 }
             });
         }
-        x += pitch;
+        if !minimal {
+            x += pitch;
+        }
     }
     // ----- ruler: markers row · labels · ticks · 2 pt render bar
     let clip = p.with_clip_rect(ruler);

@@ -115,10 +115,14 @@ fn the_minimal_timeline_has_a_thin_video_lane_tall_audio_lanes_and_one_chip_per_
     assert!(has(&h, "timeline.track.A1.muted"), "audio chip");
     assert!(!has(&h, "timeline.toggle.marker"), "no marker button");
     assert!(has(&h, "timeline.toggle.snap"));
-    assert!(has(&h, "timeline.toggle.captions"));
+    assert!(!has(&h, "timeline.toggle.captions"), "the caption button did nothing and is gone");
+    assert!(has(&h, "timeline.toggle.nest") && has(&h, "timeline.toggle.linked") && has(&h, "timeline.toggle.settings"));
+    assert!(!has(&h, "program.scrubBar"), "no scrub bar under the Program monitor");
+    assert!(has(&h, "program.transport.playback.toggle"));
     let tl = &h.state().ui.timeline;
     assert!(tl.header_w < 60.0, "narrow header column: {}", tl.header_w);
     assert!(tl.video_track_h < 40.0, "thin video lane: {}", tl.video_track_h);
+    assert!(tl.split < 0.4, "most of the height is for the audio lanes: {}", tl.split);
     assert!(tl.audio_track_h > 90.0, "tall audio lanes for the waveform: {}", tl.audio_track_h);
 }
 
