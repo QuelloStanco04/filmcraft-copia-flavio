@@ -1,0 +1,8 @@
+asset:        icon-192.png
+title:        FilmCraft web app icon for the install prompt (PWA), 192 px
+author:       Brandon Thomas (FilmCraft owner), for the FilmCraft project
+source:       original work (drawn by the owner in ArtCraft, then vectorised)
+license:      MIT OR Apache-2.0
+license-file: assets/app-icon/LICENSE.txt
+added:        2026-10-15 by Claude (agent) for Flavio
+notes:        Downscaled from assets/app-icon/filmcraft-1024.png.

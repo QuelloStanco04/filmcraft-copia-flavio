@@ -1,0 +1,53 @@
+# Publishes the web build to GitHub Pages (https://<user>.github.io/<repo>/) so the app can be
+# opened, and installed ("Add to Home screen"), from any browser, e.g. on an Android tablet.
+# The page opens with the minimal interface (?minimal). One-time setup: Settings > Pages >
+# Source: GitHub Actions.
+name: Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [minimal-ui]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm-bindgen CLI (same version as the crate)
+        run: |
+          V=$(grep -A1 'name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$V" --locked
+      - name: Build the web app
+        run: cargo xtask web
+      - name: Open with the minimal interface when installed
+        run: |
+          sed -i 's|"start_url": "./"|"start_url": "./?minimal"|' target/web/dist/manifest.webmanifest
+      - name: Static site only
+        run: touch target/web/dist/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

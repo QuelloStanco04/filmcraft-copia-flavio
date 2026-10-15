@@ -636,19 +636,12 @@ impl FilmcraftApp {
         if !self.minimal_ui {
             return;
         }
-        if self.ui.dock.contains(PanelKind::Tools) {
-            self.ui.dock.close(PanelKind::Tools);
-        }
+        // Once per workspace load (the launch, or a workspace chosen from the header): the minimal
+        // layout replaces the factory Editing one. After that the panels are the user's to move.
         if self.minimal_tabs_workspace != self.ui.workspace {
-            for panel in [PanelKind::History, PanelKind::EssentialGraphics, PanelKind::Text] {
-                if self.ui.dock.contains(panel) {
-                    self.ui.dock.close(panel);
-                }
-            }
-            // Give the timeline the room: the panels above shrink to 40% of the height.
-            if let dock::DockNode::Split { vertical: true, size: size @ dock::SplitSize::Ratio(_), .. } = &mut self.ui.dock {
-                *size = dock::SplitSize::Ratio(0.40);
-            }
+            let layout = dock::minimal_docking(&self.workspaces, &self.ui.workspace);
+            self.ui.dock = layout.root;
+            self.ui.floating = layout.floating;
             self.minimal_tabs_workspace = self.ui.workspace.clone();
         }
     }
@@ -875,7 +868,7 @@ impl FilmcraftApp {
 
     pub fn set_workspace(&mut self, name: &str) {
         self.ui.workspace = name.to_string();
-        let layout = dock::saved_docking(&self.workspaces, name);
+        let layout = if self.minimal_ui { dock::minimal_docking(&self.workspaces, name) } else { dock::saved_docking(&self.workspaces, name) };
         self.ui.dock = layout.root;
         self.ui.floating = layout.floating;
         self.pending_panel_raise = None;

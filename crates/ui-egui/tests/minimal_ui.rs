@@ -1,8 +1,9 @@
 //! Headless UI tests of the minimal interface (`FilmcraftApp::with_minimal_ui`, `?minimal` on the
-//! web): it hides the Discord button, the Tools panel, the monitor buttons that have shortcuts and
-//! the History, Essential Graphics and Text tabs, and slims the timeline's track headers. Off by
-//! default, where nothing changes.
+//! web): a header with only Quick Export, no Discord or Tools, monitor buttons that have shortcuts
+//! hidden, a starting layout (Program + meters over Timeline + a narrow column) whose panels stay
+//! free, and a timeline with one chip per track. Off by default, where nothing changes.
 
+use egui::{Event, Modifiers, PointerButton, pos2};
 use egui_kittest::Harness;
 use filmcraft_engine::Session;
 use filmcraft_ui_egui::FilmcraftApp;
@@ -59,28 +60,85 @@ fn the_minimal_interface_drops_the_buttons_that_have_shortcuts() {
 }
 
 #[test]
-fn the_minimal_interface_closes_history_essential_graphics_and_text() {
+fn the_minimal_header_keeps_only_quick_export() {
     let h = harness(true);
-    for panel in [PanelKind::History, PanelKind::EssentialGraphics, PanelKind::Text, PanelKind::Tools] {
-        assert!(!h.state().ui.dock.contains(panel), "{panel:?} still docked");
+    assert!(has(&h, "header.quickExport"));
+    for id in ["fullscreen", "volume", "search", "notifications", "appearance", "workspaces", "workspaceName"] {
+        assert!(!has(&h, &format!("header.{id}")), "header.{id} should be hidden");
     }
-    for panel in [PanelKind::Program, PanelKind::Timeline, PanelKind::Project, PanelKind::Properties] {
-        assert!(h.state().ui.dock.contains(panel), "{panel:?} missing");
+    let d = harness(false);
+    for id in ["quickExport", "fullscreen", "volume", "search", "notifications", "appearance", "workspaces"] {
+        assert!(has(&d, &format!("header.{id}")), "header.{id} missing by default");
     }
 }
 
 #[test]
-fn the_minimal_timeline_has_a_thin_video_lane_tall_audio_lanes_and_slim_headers() {
+fn the_minimal_layout_is_a_starting_point_with_the_agreed_panels() {
     let h = harness(true);
-    assert!(!has(&h, "timeline.track.V1.sourcePatch"));
-    assert!(!has(&h, "timeline.track.V1.target"));
-    assert!(!has(&h, "timeline.track.V1.syncLock"));
-    assert!(has(&h, "timeline.track.V1.locked"), "lock stays");
-    assert!(has(&h, "timeline.track.V1.enabled"), "eye stays");
-    assert!(has(&h, "timeline.track.A1.muted"), "mute stays");
-    assert!(has(&h, "timeline.track.A1.solo"), "solo stays");
+    for panel in [PanelKind::History, PanelKind::EssentialGraphics, PanelKind::Tools, PanelKind::Project] {
+        assert!(!h.state().ui.dock.contains(panel), "{panel:?} still docked");
+    }
+    for panel in
+        [PanelKind::Program, PanelKind::AudioMeters, PanelKind::Timeline, PanelKind::Properties, PanelKind::EffectControls, PanelKind::Source, PanelKind::Text]
+    {
+        assert!(h.state().ui.dock.contains(panel), "{panel:?} missing");
+    }
+    assert!(h.state().ui_error.is_none(), "{:?}", h.state().ui_error);
+}
+
+#[test]
+fn panels_stay_free_in_the_minimal_interface() {
+    let mut h = harness(true);
+    // a panel closed at launch can be opened again, and stays
+    h.state_mut().show_panel(PanelKind::Project);
+    h.state_mut().show_panel(PanelKind::Tools);
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(h.state().ui.dock.contains(PanelKind::Project), "Project can be reopened");
+    assert!(h.state().ui.dock.contains(PanelKind::Tools), "Tools can be reopened and is not closed again");
+    // and a panel can be closed
+    h.state_mut().ui.dock.close(PanelKind::Text);
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(!h.state().ui.dock.contains(PanelKind::Text));
+}
+
+#[test]
+fn the_minimal_timeline_has_a_thin_video_lane_tall_audio_lanes_and_one_chip_per_track() {
+    let h = harness(true);
+    for gone in ["sourcePatch", "target", "syncLock", "locked", "solo"] {
+        assert!(!has(&h, &format!("timeline.track.V1.{gone}")) && !has(&h, &format!("timeline.track.A1.{gone}")), "{gone} should be gone");
+    }
+    assert!(has(&h, "timeline.track.V1.enabled"), "video chip");
+    assert!(has(&h, "timeline.track.A1.muted"), "audio chip");
+    assert!(!has(&h, "timeline.toggle.marker"), "no marker button");
+    assert!(has(&h, "timeline.toggle.snap"));
+    assert!(has(&h, "timeline.toggle.captions"));
     let tl = &h.state().ui.timeline;
-    assert!(tl.header_w < 204.0, "narrower header column: {}", tl.header_w);
+    assert!(tl.header_w < 60.0, "narrow header column: {}", tl.header_w);
     assert!(tl.video_track_h < 40.0, "thin video lane: {}", tl.video_track_h);
     assert!(tl.audio_track_h > 90.0, "tall audio lanes for the waveform: {}", tl.audio_track_h);
+}
+
+#[test]
+fn clicking_the_chip_mutes_an_audio_track_and_hides_a_video_track() {
+    let mut h = harness(true);
+    let seq = |h: &Harness<'static, FilmcraftApp>| h.state().session.active_sequence().map(|s| (s.video_tracks[0].enabled, s.audio_tracks[0].muted));
+    let before = seq(&h).unwrap();
+    for id in ["timeline.track.V1.enabled", "timeline.track.A1.muted"] {
+        let r = h.state().auto.query(id).first().map(|e| e.rect).unwrap();
+        let pos = pos2(r[0] + r[2] / 2.0, r[1] + r[3] / 2.0);
+        h.event(Event::PointerMoved(pos));
+        h.step();
+        for pressed in [true, false] {
+            h.event(Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+            h.step();
+        }
+        h.run_steps(3);
+    }
+    let after = seq(&h).unwrap();
+    assert_eq!(after.0, !before.0, "video track toggled");
+    assert_eq!(after.1, !before.1, "audio track toggled");
 }

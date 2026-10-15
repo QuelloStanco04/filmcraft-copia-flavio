@@ -273,6 +273,29 @@ pub fn saved_docking(prefs: &WorkspacePrefs, name: &str) -> Layout {
     saved.unwrap_or_else(|| Layout { root: workspace(name), floating: vec![] })
 }
 
+/// The layout of the minimal interface (`?minimal`): the Program monitor with the Audio Meters beside
+/// it on top; the Timeline, as wide as possible, with a narrow column of panels beside it below.
+/// Project, Tools, History and Essential Graphics are not docked (Window menu, or Shift+1 for
+/// Project). It is only a starting point: every panel can be moved, resized, closed and reopened.
+pub fn minimal_workspace() -> DockNode {
+    use PanelKind::*;
+    use SplitSize::*;
+    vsplit(
+        Ratio(0.42),
+        hsplit(FixedB(130.0), tabs(&[Program], 0), tabs(&[AudioMeters], 0)),
+        hsplit(FixedB(250.0), tabs(&[Timeline], 0), tabs(&[Properties, EffectControls, Source, Text], 0)),
+    )
+}
+
+/// Like [`saved_docking`], but the factory Editing workspace becomes [`minimal_workspace`]. A layout
+/// the user saved under that name is kept.
+pub fn minimal_docking(prefs: &WorkspacePrefs, name: &str) -> Layout {
+    if name == "Editing" && !prefs.saved.iter().any(|saved| saved.name == name) {
+        return Layout { root: minimal_workspace(), floating: vec![] };
+    }
+    saved_docking(prefs, name)
+}
+
 /// Older Effects workspaces stored the same Effect Controls panel twice: selected beside
 /// Source, and an inactive duplicate beside Essential Graphics. Remove only that known
 /// duplicate shape; unrelated malformed or ambiguous saved layouts still fail validation.
