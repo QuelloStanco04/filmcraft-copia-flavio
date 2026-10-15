@@ -80,45 +80,53 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
         icons::paint(ui.painter(), r.shrink(6.0), icon, if resp.hovered() { t.text } else { t.text_dim });
         resp
     };
-    if btn(ui, Icon::Fullscreen, "fullscreen", tl!("Full screen"), app).clicked() {
-        let fs = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fs));
-    }
-    if btn(ui, Icon::Speaker, "volume", tl!("Volume"), app).clicked() {
-        app.ui.status = tl!("Master volume: use the Audio Track Mixer").into();
-    }
-    if btn(ui, Icon::Search, "search", tl!("Search"), app).clicked() {
-        app.show_panel(crate::dock::PanelKind::Effects);
-    }
-    if btn(ui, Icon::Bell, "notifications", tl!("Progress"), app).clicked() {
-        app.ui.mode = Mode::Export;
+    // The minimal interface keeps only Quick Export in this cluster.
+    let minimal = app.minimal_ui;
+    if !minimal {
+        if btn(ui, Icon::Fullscreen, "fullscreen", tl!("Full screen"), app).clicked() {
+            let fs = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Fullscreen(!fs));
+        }
+        if btn(ui, Icon::Speaker, "volume", tl!("Volume"), app).clicked() {
+            app.ui.status = tl!("Master volume: use the Audio Track Mixer").into();
+        }
+        if btn(ui, Icon::Search, "search", tl!("Search"), app).clicked() {
+            app.show_panel(crate::dock::PanelKind::Effects);
+        }
+        if btn(ui, Icon::Bell, "notifications", tl!("Progress"), app).clicked() {
+            app.ui.mode = Mode::Export;
+        }
     }
     // Quick Export: a popup with File Name & Location, a preset list and Export (Premiere 26)
-    let qx = rect.max.x - 14.0 - 4.0 * 38.0; // the fifth button from the right
+    let qx = rect.max.x - 14.0 - if minimal { 0.0 } else { 4.0 * 38.0 }; // the fifth button from the right
     if btn(ui, Icon::Export, "quickExport", tl!("Quick Export"), app).clicked() {
         app.ui.export.quick_open = !app.ui.export.quick_open;
         ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("quick-export-toggled"), true));
     }
     crate::panels::export_mode::quick_export(app, ui.ctx(), pos2(qx - 340.0, rect.max.y + 4.0));
     // Appearance Mode: click for the next one (Auto, Light, Dark); the icon shows the current one.
-    let (icon, mode) = match app.session.prefs.appearance.appearance_mode.as_str() {
-        "auto" => (Icon::Monitor, tl!("Sync with system")),
-        "light" => (Icon::Sun, tl!("Light")),
-        _ => (Icon::Moon, tl!("Dark")),
-    };
-    let tip = format!("{}: {mode}", tl!("Appearance Mode"));
-    let appearance = btn(ui, icon, "appearance", &tip, app);
-    appearance.context_menu(|ui| crate::panels::settings::appearance_context_menu(app, ui));
-    if appearance.clicked() {
-        crate::panels::settings::cycle_appearance(app, ui.ctx());
+    if !minimal {
+        let (icon, mode) = match app.session.prefs.appearance.appearance_mode.as_str() {
+            "auto" => (Icon::Monitor, tl!("Sync with system")),
+            "light" => (Icon::Sun, tl!("Light")),
+            _ => (Icon::Moon, tl!("Dark")),
+        };
+        let tip = format!("{}: {mode}", tl!("Appearance Mode"));
+        let appearance = btn(ui, icon, "appearance", &tip, app);
+        appearance.context_menu(|ui| crate::panels::settings::appearance_context_menu(app, ui));
+        if appearance.clicked() {
+            crate::panels::settings::cycle_appearance(app, ui.ctx());
+        }
     }
-    let ws_resp = btn(ui, Icon::Workspaces, "workspaces", tl!("Workspaces"), app);
+    let ws_resp = if minimal { None } else { Some(btn(ui, Icon::Workspaces, "workspaces", tl!("Workspaces"), app)) };
     // workspace name (caps)
-    let ws = crate::i18n::t(&app.ui.workspace).to_uppercase();
+    let ws = if minimal { String::new() } else { crate::i18n::t(&app.ui.workspace).to_uppercase() };
     let wg = p.layout_no_wrap(ws.clone(), Tokens::ui(11.0), t.text_dim);
     let wr = Rect::from_min_size(pos2(rx - wg.size().x + 10.0, rect.center().y - 10.0), vec2(wg.size().x + 8.0, 20.0));
     let wresp = ui.interact(wr, egui::Id::new("hdr-ws-name"), Sense::click());
-    app.auto.add("header.workspaceName", wr, &ws);
+    if !minimal {
+        app.auto.add("header.workspaceName", wr, &ws);
+    }
     p.galley_with_override_text_color(pos2(wr.min.x + 4.0, rect.center().y - wg.size().y / 2.0), wg, if wresp.hovered() { t.text } else { t.text_dim });
     // Community: a labelled Discord button, always one click away (hidden in the minimal interface).
     {
@@ -157,7 +165,8 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
         }
     }
     let popup_id = egui::Id::new("workspaces-popup");
-    if ws_resp.clicked() || wresp.clicked() {
+    let ws_btn_clicked = ws_resp.as_ref().is_some_and(|r| r.clicked());
+    if !minimal && (ws_btn_clicked || wresp.clicked()) {
         ui.ctx().data_mut(|d| d.insert_temp(popup_id, true));
     }
     let open = ui.ctx().data(|d| d.get_temp::<bool>(popup_id).unwrap_or(false));
@@ -181,7 +190,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
                 }
             });
         });
-        if area.response.clicked_elsewhere() && !(ws_resp.clicked() || wresp.clicked()) {
+        if area.response.clicked_elsewhere() && !(ws_btn_clicked || wresp.clicked()) {
             ui.ctx().data_mut(|d| d.insert_temp(popup_id, false));
         }
     }
