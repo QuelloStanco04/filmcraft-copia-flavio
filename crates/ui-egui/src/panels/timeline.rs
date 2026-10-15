@@ -1239,8 +1239,7 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
             p.text(chip.center(), Align2::CENTER_CENTER, &label, Tokens::ui(11.0), if on { Color32::WHITE } else { t.text_dim });
             let (key, tip) = if r.kind == TrackKind::Video { ("enabled", "Toggle Track Output") } else { ("muted", "Mute Track") };
             app.auto.add(&format!("timeline.track.{label}.{key}"), chip, tip);
-            let cresp =
-                cresp.on_hover_text(if r.kind == TrackKind::Video { tl!("Click: show or hide this track") } else { tl!("Click: mute or unmute this track") });
+            let cresp = cresp.on_hover_text(if r.kind == TrackKind::Video { "Click: show or hide this track" } else { "Click: mute or unmute this track" });
             if cresp.clicked() {
                 let params = if r.kind == TrackKind::Video {
                     json!({"track": r.track.0, "enabled": !tr.enabled})
@@ -1250,11 +1249,11 @@ fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows:
                 actions.push(("timeline.setTrack".into(), params));
             }
             cresp.context_menu(|ui| {
-                if ui.button(if tr.locked { tl!("Unlock track") } else { tl!("Lock track") }).clicked() {
+                if ui.button(if tr.locked { "Unlock track" } else { "Lock track" }).clicked() {
                     actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "locked": !tr.locked})));
                     ui.close();
                 }
-                if r.kind == TrackKind::Audio && ui.button(if tr.solo { tl!("Unsolo track") } else { tl!("Solo track") }).clicked() {
+                if r.kind == TrackKind::Audio && ui.button(if tr.solo { "Unsolo track" } else { "Solo track" }).clicked() {
                     actions.push(("timeline.setTrack".into(), json!({"track": r.track.0, "solo": !tr.solo})));
                     ui.close();
                 }
