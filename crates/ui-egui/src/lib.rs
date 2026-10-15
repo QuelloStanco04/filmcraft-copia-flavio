@@ -272,9 +272,10 @@ pub(crate) const EXPORT_SAVE_DIALOGS: [(&str, &str, &str); 7] = [
 ];
 
 /// Track heights a sequence's Timeline starts with in the minimal interface (a sequence that has a
-/// saved view keeps its own).
-const MINIMAL_VIDEO_TRACK_H: f32 = 92.0;
-const MINIMAL_AUDIO_TRACK_H: f32 = 44.0;
+/// saved view keeps its own): a thin video lane and tall audio lanes, so the waveform is easy to
+/// read when cutting silences.
+const MINIMAL_VIDEO_TRACK_H: f32 = 28.0;
+const MINIMAL_AUDIO_TRACK_H: f32 = 104.0;
 
 pub struct FilmcraftApp {
     pub session: Session,
@@ -617,8 +618,8 @@ impl FilmcraftApp {
     pub fn with_minimal_ui(mut self, on: bool) -> Self {
         self.minimal_ui = on;
         if on {
-            // A timeline in the CapCut spirit: tall clips with big thumbnails, slim audio lanes and
-            // a narrow track-header column.
+            // A timeline built for cutting by sound: a thin video lane, tall audio lanes with a
+            // readable waveform, and a narrow track-header column.
             let tl = &mut self.ui.timeline;
             tl.video_track_h = MINIMAL_VIDEO_TRACK_H;
             tl.audio_track_h = MINIMAL_AUDIO_TRACK_H;

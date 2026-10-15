@@ -893,8 +893,10 @@ fn set_transport_visible(hidden: &mut Vec<String>, command: &str, visible: bool)
 /// Width and height of a transport button.
 const TRANSPORT_BUTTON: f32 = 28.0;
 
-/// The transport buttons the minimal interface keeps (play, step, go to In/Out, for both monitors).
-const MINIMAL_TRANSPORT: [&str; 10] = [
+/// The transport buttons the minimal interface keeps (play, step, go to In/Out and the proxy
+/// toggle, for both monitors).
+const MINIMAL_TRANSPORT: [&str; 11] = [
+    "media.toggleProxies",
     "src.goIn",
     "src.stepBack",
     "source.playback.toggle",

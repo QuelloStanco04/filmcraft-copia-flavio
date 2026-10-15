@@ -51,6 +51,7 @@ fn the_minimal_interface_drops_the_buttons_that_have_shortcuts() {
     assert!(!has(&h, "program.transport.sequence.extract"));
     assert!(!has(&h, "program.transport.exportFrame"));
     assert!(!has(&h, "program.transport.editor"), "no button editor");
+    assert!(has(&h, "program.transport.media.toggleProxies"), "the proxy toggle stays");
     assert!(has(&h, "program.transport.playback.toggle"), "play stays");
     assert!(has(&h, "program.transport.playhead.stepBack"));
     assert!(has(&h, "program.transport.playhead.stepForward"));
@@ -69,7 +70,7 @@ fn the_minimal_interface_closes_history_essential_graphics_and_text() {
 }
 
 #[test]
-fn the_minimal_timeline_has_slim_track_headers_and_tall_video_clips() {
+fn the_minimal_timeline_has_a_thin_video_lane_tall_audio_lanes_and_slim_headers() {
     let h = harness(true);
     assert!(!has(&h, "timeline.track.V1.sourcePatch"));
     assert!(!has(&h, "timeline.track.V1.target"));
@@ -80,5 +81,6 @@ fn the_minimal_timeline_has_slim_track_headers_and_tall_video_clips() {
     assert!(has(&h, "timeline.track.A1.solo"), "solo stays");
     let tl = &h.state().ui.timeline;
     assert!(tl.header_w < 204.0, "narrower header column: {}", tl.header_w);
-    assert!(tl.video_track_h > 60.0, "taller video lanes: {}", tl.video_track_h);
+    assert!(tl.video_track_h < 40.0, "thin video lane: {}", tl.video_track_h);
+    assert!(tl.audio_track_h > 90.0, "tall audio lanes for the waveform: {}", tl.audio_track_h);
 }
