@@ -35,7 +35,10 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     // ruler does the same job) so the picture gets the height; the zoom and quality menus stay.
     let compact = app.minimal_ui && which == Which::Program;
     let bars_h = if compact { 0.0 } else { 24.0 + 15.0 };
-    let controls_h = 28.0 + bars_h + 36.0 + if stacked_controls { 26.0 } else { 0.0 } + source_drag_h;
+    // On a wide Program monitor the timecode, zoom and quality menus share the row of the transport
+    // buttons, which sit in the middle of it.
+    let merged = compact && !stacked_controls && rect.width() >= 900.0;
+    let controls_h = if merged { 38.0 } else { 28.0 + bars_h + 36.0 + if stacked_controls { 26.0 } else { 0.0 } + source_drag_h };
     let video_area = Rect::from_min_max(rect.min + vec2(4.0, 4.0), pos2(rect.max.x - 4.0, rect.max.y - controls_h));
     // the Source monitor's time ruler starts at `origin` (a subclip restricted to its range)
     let mut origin = Tick::ZERO;
@@ -443,7 +446,13 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     }
 
     // ---- transport buttons
-    let row3_y = if compact { bar.min.y + 4.0 } else { zoom_bar.max.y + 4.0 };
+    let row3_y = if merged {
+        row1.min.y - 3.0
+    } else if compact {
+        bar.min.y + 4.0
+    } else {
+        zoom_bar.max.y + 4.0
+    };
     let row3 = Rect::from_min_size(pos2(rect.min.x, row3_y), vec2(rect.width(), 32.0));
     transport(app, ui, row3, which);
 }

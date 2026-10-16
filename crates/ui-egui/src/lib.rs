@@ -626,6 +626,7 @@ impl FilmcraftApp {
             tl.header_w = 48.0;
             // thin video lanes need little room: most of the height goes to the audio lanes
             tl.split = 0.3;
+            self.ui.show_status_bar = false; // the hint line under the panels is height the timeline can use
         }
         self
     }
@@ -638,6 +639,8 @@ impl FilmcraftApp {
         if !self.minimal_ui {
             return;
         }
+        // slimmer panel tab bars (every panel's title row)
+        self.tokens.tab_h = self.tokens.tab_h.min(22.0);
         // Once per workspace load (the launch, or a workspace chosen from the header): the minimal
         // layout replaces the factory Editing one. After that the panels are the user's to move.
         if self.minimal_tabs_workspace != self.ui.workspace {

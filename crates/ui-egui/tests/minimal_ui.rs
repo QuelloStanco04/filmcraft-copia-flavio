@@ -146,3 +146,16 @@ fn clicking_the_chip_mutes_an_audio_track_and_hides_a_video_track() {
     assert_eq!(after.0, !before.0, "video track toggled");
     assert_eq!(after.1, !before.1, "audio track toggled");
 }
+
+#[test]
+fn the_minimal_interface_wastes_no_rows() {
+    let h = harness(true);
+    assert!(!h.state().ui.show_status_bar, "no hint line under the panels");
+    assert!(h.state().tokens.tab_h < 30.0, "slim panel tab bars: {}", h.state().tokens.tab_h);
+    // the Program monitor's timecode and its transport buttons share one row
+    let y = |id: &str| h.state().auto.query(id).first().map(|e| e.rect[1] + e.rect[3] / 2.0).unwrap_or(f32::NAN);
+    let (tc, play) = (y("program.timecode"), y("program.transport.playback.toggle"));
+    assert!((tc - play).abs() < 8.0, "timecode row {tc} vs transport row {play}");
+    let d = harness(false);
+    assert!(d.state().ui.show_status_bar && d.state().tokens.tab_h >= 30.0, "default interface unchanged");
+}

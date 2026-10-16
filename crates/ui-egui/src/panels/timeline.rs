@@ -27,7 +27,7 @@ pub use super::timeline_hit::{Hit, ROLL_PX, hit, selection_trim_kind};
 
 const TOP_H: f32 = 58.0; // timecode + toolbar (left) / ruler (right)
 const RULER_H: f32 = 44.0;
-const MINIMAL_TOP_H: f32 = RULER_H; // minimal interface: just the ruler; the toolbar sits in its corner
+const MINIMAL_RULER_H: f32 = 38.0; // minimal interface: just a slimmer ruler; the toolbar sits in its corner
 const SCROLLBAR_H: f32 = 17.0;
 const DIVIDER_H: f32 = 5.0;
 const MASTER_H: f32 = 34.0;
@@ -303,9 +303,9 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     let rate = seq.settings.frame_rate;
     let dt = ctx.input(|i| i.stable_dt).min(0.05) as f64;
     let header_w = app.ui.timeline.header_w;
-    let top_h = if app.minimal_ui { MINIMAL_TOP_H } else { TOP_H };
+    let (top_h, ruler_h) = if app.minimal_ui { (MINIMAL_RULER_H, MINIMAL_RULER_H) } else { (TOP_H, RULER_H) };
     let content = Rect::from_min_max(pos2(rect.min.x + header_w, rect.min.y + top_h), pos2(rect.max.x - SCROLLBAR_H, rect.max.y - SCROLLBAR_H));
-    let ruler = Rect::from_min_max(pos2(content.min.x, rect.min.y + top_h - RULER_H), pos2(content.max.x, rect.min.y + top_h));
+    let ruler = Rect::from_min_max(pos2(content.min.x, rect.min.y + top_h - ruler_h), pos2(content.max.x, rect.min.y + top_h));
     app.last_timeline_width = content.width();
     let painter = ui.painter().clone();
     painter.rect_filled(rect, 0.0, t.panel_bg);
@@ -1521,7 +1521,7 @@ fn draw_top(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq: &Sequenc
     // ----- ruler: markers row · labels · ticks · 2 pt render bar
     let clip = p.with_clip_rect(ruler);
     let marker_y = ruler.min.y + 2.0;
-    let label_y = ruler.min.y + 24.0;
+    let label_y = ruler.min.y + if minimal { 21.0 } else { 24.0 };
     let tick_base = ruler.max.y - 3.0;
     let fps = rate.as_f64();
     let base = rate.timecode_base();
