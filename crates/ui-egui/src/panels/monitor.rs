@@ -37,7 +37,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     let bars_h = if compact { 0.0 } else { 24.0 + 15.0 };
     // On a wide Program monitor the timecode, zoom and quality menus share the row of the transport
     // buttons, which sit in the middle of it.
-    let merged = compact && !stacked_controls && rect.width() >= 900.0;
+    let merged = compact && !stacked_controls && rect.width() >= 640.0;
     let controls_h = if merged { 38.0 } else { 28.0 + bars_h + 36.0 + if stacked_controls { 26.0 } else { 0.0 } + source_drag_h };
     let video_area = Rect::from_min_max(rect.min + vec2(4.0, 4.0), pos2(rect.max.x - 4.0, rect.max.y - controls_h));
     // the Source monitor's time ruler starts at `origin` (a subclip restricted to its range)

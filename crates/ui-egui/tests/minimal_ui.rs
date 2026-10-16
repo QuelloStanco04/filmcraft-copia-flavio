@@ -75,12 +75,10 @@ fn the_minimal_header_keeps_only_quick_export() {
 #[test]
 fn the_minimal_layout_is_a_starting_point_with_the_agreed_panels() {
     let h = harness(true);
-    for panel in [PanelKind::History, PanelKind::EssentialGraphics, PanelKind::Tools, PanelKind::Project] {
+    for panel in [PanelKind::History, PanelKind::EssentialGraphics, PanelKind::Tools, PanelKind::Project, PanelKind::Source] {
         assert!(!h.state().ui.dock.contains(panel), "{panel:?} still docked");
     }
-    for panel in
-        [PanelKind::Program, PanelKind::AudioMeters, PanelKind::Timeline, PanelKind::Properties, PanelKind::EffectControls, PanelKind::Source, PanelKind::Text]
-    {
+    for panel in [PanelKind::Program, PanelKind::AudioMeters, PanelKind::Timeline, PanelKind::Properties, PanelKind::EffectControls, PanelKind::Text] {
         assert!(h.state().ui.dock.contains(panel), "{panel:?} missing");
     }
     assert!(h.state().ui_error.is_none(), "{:?}", h.state().ui_error);

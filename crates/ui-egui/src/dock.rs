@@ -273,17 +273,18 @@ pub fn saved_docking(prefs: &WorkspacePrefs, name: &str) -> Layout {
     saved.unwrap_or_else(|| Layout { root: workspace(name), floating: vec![] })
 }
 
-/// The layout of the minimal interface (`?minimal`): the Program monitor with the Audio Meters beside
-/// it on top; the Timeline, as wide as possible, with a narrow column of panels beside it below.
-/// Project, Tools, History and Essential Graphics are not docked (Window menu, or Shift+1 for
-/// Project). It is only a starting point: every panel can be moved, resized, closed and reopened.
+/// The layout of the minimal interface (`?minimal`): the Program monitor with the Properties / Effect
+/// Controls / Text panels beside it on top; the Timeline, as wide as possible, with the Audio Meters
+/// beside it below. Project, Source, Tools, History and Essential Graphics are not docked (Window
+/// menu, or Shift+1 for Project, Shift+2 for Source). It is only a starting point: every panel can
+/// be moved, resized, closed and reopened.
 pub fn minimal_workspace() -> DockNode {
     use PanelKind::*;
     use SplitSize::*;
     vsplit(
-        Ratio(0.46),
-        hsplit(FixedB(130.0), tabs(&[Program], 0), tabs(&[AudioMeters], 0)),
-        hsplit(FixedB(250.0), tabs(&[Timeline], 0), tabs(&[Properties, EffectControls, Source, Text], 0)),
+        Ratio(0.49),
+        hsplit(Ratio(0.58), tabs(&[Program], 0), tabs(&[Properties, EffectControls, Text], 0)),
+        hsplit(FixedB(260.0), tabs(&[Timeline], 0), tabs(&[AudioMeters], 0)),
     )
 }
 
