@@ -66,7 +66,9 @@ fn the_minimal_header_keeps_only_quick_export() {
     for id in ["fullscreen", "volume", "search", "notifications", "appearance", "workspaces", "workspaceName"] {
         assert!(!has(&h, &format!("header.{id}")), "header.{id} should be hidden");
     }
+    assert!(!has(&h, "header.home") && !has(&h, "header.mode.edit"), "no Home / mode tabs");
     let d = harness(false);
+    assert!(has(&d, "header.home") && has(&d, "header.mode.edit"), "Home / mode tabs by default");
     for id in ["quickExport", "fullscreen", "volume", "search", "notifications", "appearance", "workspaces"] {
         assert!(has(&d, &format!("header.{id}")), "header.{id} missing by default");
     }
@@ -121,7 +123,7 @@ fn the_minimal_timeline_has_a_thin_video_lane_tall_audio_lanes_and_one_chip_per_
     assert!(tl.header_w < 60.0, "narrow header column: {}", tl.header_w);
     assert!(tl.video_track_h < 40.0, "thin video lane: {}", tl.video_track_h);
     assert!(tl.split < 0.4, "most of the height is for the audio lanes: {}", tl.split);
-    assert!(tl.audio_track_h > 90.0, "tall audio lanes for the waveform: {}", tl.audio_track_h);
+    assert!(tl.audio_track_h > 50.0, "tall audio lanes for the waveform: {}", tl.audio_track_h);
 }
 
 #[test]
@@ -154,6 +156,10 @@ fn the_minimal_interface_wastes_no_rows() {
     let y = |id: &str| h.state().auto.query(id).first().map(|e| e.rect[1] + e.rect[3] / 2.0).unwrap_or(f32::NAN);
     let (tc, play) = (y("program.timecode"), y("program.transport.playback.toggle"));
     assert!((tc - play).abs() < 8.0, "timecode row {tc} vs transport row {play}");
+    assert!(h.state().tokens.gap <= 3.0, "thin dividers: {}", h.state().tokens.gap);
+    assert!(h.state().tokens.hide_timeline_strip, "one sequence: no tab strip over the timeline");
+    assert!(h.state().ui.timeline.auto_fit, "all tracks fitted");
     let d = harness(false);
+    assert!(!d.state().tokens.hide_timeline_strip && !d.state().ui.timeline.auto_fit);
     assert!(d.state().ui.show_status_bar && d.state().tokens.tab_h >= 30.0, "default interface unchanged");
 }

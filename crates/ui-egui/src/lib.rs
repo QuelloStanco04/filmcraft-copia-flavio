@@ -626,6 +626,7 @@ impl FilmcraftApp {
             tl.header_w = 48.0;
             // thin video lanes need little room: most of the height goes to the audio lanes
             tl.split = 0.3;
+            tl.auto_fit = true; // all the tracks in view, the audio lanes as tall as the room allows
             self.ui.show_status_bar = false; // the hint line under the panels is height the timeline can use
         }
         self
@@ -639,8 +640,11 @@ impl FilmcraftApp {
         if !self.minimal_ui {
             return;
         }
-        // slimmer panel tab bars (every panel's title row)
+        // slimmer panel tab bars (every panel's title row) and dividers, and no tab strip over the
+        // Timeline while there is only one sequence to show
         self.tokens.tab_h = self.tokens.tab_h.min(22.0);
+        self.tokens.gap = self.tokens.gap.min(3.0);
+        self.tokens.hide_timeline_strip = self.session.state.open_sequences.len() <= 1;
         // Once per workspace load (the launch, or a workspace chosen from the header): the minimal
         // layout replaces the factory Editing one. After that the panels are the user's to move.
         if self.minimal_tabs_workspace != self.ui.workspace {
@@ -829,6 +833,7 @@ impl FilmcraftApp {
         let show = |v: &mut state::TimelineView, s: filmcraft_engine::project::SequenceView| {
             (v.pps, v.target_pps, v.scroll, v.target_scroll) = (s.pps, s.pps, s.scroll, s.scroll);
             (v.v_scroll, v.a_scroll, v.video_track_h, v.audio_track_h) = (s.v_scroll, s.a_scroll, s.video_track_h, s.audio_track_h);
+            v.auto_last = None;
             (v.fit_pending, v.fit_empty) = (false, None);
         };
         if self.timeline_view_of != Some(active) {
@@ -842,6 +847,7 @@ impl FilmcraftApp {
                     let d = state::TimelineView::default();
                     let (video_h, audio_h) = if self.minimal_ui { (MINIMAL_VIDEO_TRACK_H, MINIMAL_AUDIO_TRACK_H) } else { (d.video_track_h, d.audio_track_h) };
                     (v.v_scroll, v.a_scroll, v.video_track_h, v.audio_track_h) = (0.0, 0.0, video_h, audio_h);
+                    v.auto_last = None;
                     (v.fit_pending, v.fit_empty) = (true, None);
                     self.timeline_view_last = None;
                 }
@@ -1802,7 +1808,13 @@ impl FilmcraftApp {
         let t = self.tokens;
         let full = ui.max_rect();
         ui.painter().rect_filled(full, 0.0, t.app_bg);
-        let header_h = if self.ui.show_header { 38.0 } else { 0.0 };
+        let header_h = if !self.ui.show_header {
+            0.0
+        } else if self.minimal_ui {
+            30.0
+        } else {
+            38.0
+        };
         let header = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), header_h));
         if self.ui.show_header {
             header::show(self, ui, header);

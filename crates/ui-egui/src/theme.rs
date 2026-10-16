@@ -147,6 +147,8 @@ pub struct Tokens {
     pub radius_sm: f32,
     pub gap: f32,
     pub tab_h: f32,
+    /// The minimal interface hides the Timeline panel's tab strip while one sequence is open.
+    pub hide_timeline_strip: bool,
 }
 
 impl Tokens {
@@ -240,6 +242,7 @@ impl Tokens {
             radius_sm: 4.0,
             gap: 4.0,
             tab_h: 32.0,
+            hide_timeline_strip: false,
         };
         match kind {
             ThemeKind::Dark => dark,

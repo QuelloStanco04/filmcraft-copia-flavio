@@ -186,6 +186,12 @@ pub struct TimelineView {
     pub a_scroll: f32,
     /// Fraction of the track area given to video tracks.
     pub split: f32,
+    /// The minimal interface sizes the lanes so that every track is in view (until a size is
+    /// changed by hand); `auto_last` is what it set last, to notice that.
+    #[serde(default)]
+    pub auto_fit: bool,
+    #[serde(skip)]
+    pub auto_last: Option<[f32; 3]>,
     pub video_track_h: f32,
     pub audio_track_h: f32,
     pub header_w: f32,
@@ -227,6 +233,8 @@ impl Default for TimelineView {
             v_scroll: 0.0,
             a_scroll: 0.0,
             split: 0.5,
+            auto_fit: false,
+            auto_last: None,
             video_track_h: 60.0,
             audio_track_h: 56.0,
             header_w: 204.0,

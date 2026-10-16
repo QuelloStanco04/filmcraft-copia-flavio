@@ -562,7 +562,7 @@ fn layout_inner(
 ) {
     match node {
         DockNode::Tabs { panels, active } => {
-            let tab_h = if panels.len() == 1 && panels[0].compact() { 8.0 } else { t.tab_h };
+            let tab_h = if group_compact(panels, t) { 8.0 } else { t.tab_h };
             let content = Rect::from_min_max(pos2(rect.min.x, rect.min.y + tab_h), rect.max);
             out.push(Group { path: path.to_string(), rect, content, panels: panels.clone(), active: *active });
         }
@@ -587,6 +587,12 @@ fn layout_inner(
             layout_inner(ui, b, split.second, t, &format!("{path}b"), &second_path, out, reg, actions);
         }
     }
+}
+
+/// A group of one panel that is drawn with just a grip instead of a tab strip: the narrow panels
+/// (Tools, Audio Meters) and, in the minimal interface, the Timeline while one sequence is open.
+fn group_compact(panels: &[PanelKind], t: &Tokens) -> bool {
+    panels.len() == 1 && (panels[0].compact() || (t.hide_timeline_strip && panels[0] == PanelKind::Timeline))
 }
 
 /// Draw a group's frame + tab strip. Returns actions (tab clicks, panel menu, focus).
@@ -622,7 +628,7 @@ pub fn draw_group_chrome_details(ui: &mut egui::Ui, g: &Group, seqs: &SeqTabs, t
     let painter = ui.painter().clone();
     painter.rect_filled(g.rect, t.radius, t.panel_bg);
     let active_panel = g.panels.get(g.active).copied();
-    let compact = g.panels.len() == 1 && g.panels[0].compact();
+    let compact = group_compact(&g.panels, t);
     // A narrow header grip moves the entire panel, including Timeline panels whose tabs
     // separately reorder open sequences.
     if let Some(panel) = active_panel {

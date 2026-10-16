@@ -408,6 +408,9 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     let caption_area = Rect::from_min_max(pos2(rect.min.x, content.min.y), pos2(content.max.x, content.min.y + cap_n as f32 * super::timeline_captions::ROW_H));
     let cap_h = if cap_n > 0 { caption_area.height() + DIVIDER_H } else { 0.0 };
     let tracks_area = Rect::from_min_max(pos2(content.min.x, content.min.y + cap_h), content.max);
+    if app.minimal_ui {
+        fit_tracks(app, tracks_area.height(), seq.video_tracks.len(), seq.audio_tracks.len());
+    }
     let split_y = tracks_area.min.y + (tracks_area.height() - DIVIDER_H) * app.ui.timeline.split;
     let video_area = Rect::from_min_max(pos2(rect.min.x, tracks_area.min.y), pos2(content.max.x, split_y));
     let audio_area = Rect::from_min_max(pos2(rect.min.x, split_y + DIVIDER_H), pos2(content.max.x, tracks_area.max.y - MASTER_H));
@@ -1202,6 +1205,32 @@ fn patch_button(ui: &mut egui::Ui, r: Rect, clip: Rect, label: &str, on: bool, s
 }
 
 #[allow(clippy::too_many_arguments)]
+/// The minimal interface sizes the lanes so that every track is in view: the video lanes stay thin,
+/// the audio lanes share the rest (never below what a waveform needs; past that the timeline
+/// scrolls). Changing a lane height or the divider by hand turns this off.
+fn fit_tracks(app: &mut FilmcraftApp, area_h: f32, video: usize, audio: usize) {
+    const MIN_VIDEO: f32 = 20.0;
+    const MIN_AUDIO: f32 = 56.0;
+    const MAX_AUDIO: f32 = 140.0;
+    let v = &mut app.ui.timeline;
+    if !v.auto_fit {
+        return;
+    }
+    let current = [v.video_track_h, v.audio_track_h, v.split];
+    if v.auto_last.is_some_and(|last| last != current) {
+        v.auto_fit = false;
+        return;
+    }
+    let total = (area_h - DIVIDER_H).max(1.0);
+    let room = (total - MASTER_H).max(1.0);
+    let (nv, na) = (video.max(1) as f32, audio.max(1) as f32);
+    let vh = ((room - na * MIN_AUDIO) / nv).clamp(MIN_VIDEO, crate::MINIMAL_VIDEO_TRACK_H);
+    let ah = ((room - nv * vh) / na).clamp(MIN_AUDIO, MAX_AUDIO);
+    let split = (nv * vh / total).clamp(0.1, 0.9);
+    (v.video_track_h, v.audio_track_h, v.split) = (vh, ah, split);
+    v.auto_last = Some([vh, ah, split]);
+}
+
 fn draw_headers(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, rows: &[Row], rect: Rect, vclip: Rect, aclip: Rect, t: &Tokens) {
     let hw = app.ui.timeline.header_w;
     let tg = app.session.targeting();
